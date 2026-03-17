@@ -1,4 +1,4 @@
-const { domainError } = require("../utils/domainErrors");
+const { domainError } = require("../utils/domainError");
 const { heroesRepo } = require("../repositories/heroesRepo");
 
 const POWERS = ["flight", "strength", "telepathy", "speed", "invisibility"];
