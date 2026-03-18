@@ -1,4 +1,5 @@
 const { incidentsService } = require("../services/incidentsService");
+const { domainError } = require("../middleware/errorHandler");
 
 const incidentsController = {
   async list(req, res, next) {
@@ -33,16 +34,7 @@ const incidentsController = {
 
       // brak pola -> 400 (zgodnie z wymaganiami)
       if (!req.body || req.body.hero_id === undefined) {
-        return res
-          .status(400)
-          .type("application/problem+json")
-          .json({
-            type: "about:blank",
-            title: "Bad Request",
-            status: 400,
-            detail: "Missing required field: hero_id",
-            instance: req.originalUrl
-          });
+        throw domainError(400, "Missing required field: hero_id");
       }
 
       const result = await incidentsService.assign({ incidentId, heroId });
