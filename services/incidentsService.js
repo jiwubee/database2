@@ -1,5 +1,5 @@
 const { pool } = require("../db/pool");
-const { domainError } = require("../utils/domainErrors");
+const { domainError } = require("../utils/domainError");
 const { incidentsRepo } = require("../repositories/incidentsRepo");
 const { heroesRepo } = require("../repositories/heroesRepo");
 
