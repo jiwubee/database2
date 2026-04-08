@@ -1,6 +1,7 @@
 const express = require("express");
 const { heroesRouter } = require("./routes/heroes");
 const { incidentsRouter } = require("./routes/incidents");
+const { statsController } = require("./controllers/statsController");
 const { errorHandler } = require("./middleware/errorHandler");
 
 function createApp() {
@@ -11,6 +12,7 @@ function createApp() {
 
   app.use("/api/v1/heroes", heroesRouter);
   app.use("/api/v1/incidents", incidentsRouter);
+  app.get("/api/v1/stats", statsController.getStats);
 
   app.use(errorHandler);
   return app;

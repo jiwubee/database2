@@ -1,15 +1,29 @@
 const { incidentsService } = require("../services/incidentsService");
-const { domainError } = require("../middleware/errorHandler");
+const { domainError } = require("../utils/domainError");
 
 const incidentsController = {
   async list(req, res, next) {
     try {
-      const { threat_level, status } = req.query;
-      const data = await incidentsService.list({
-        threatLevel: threat_level,
-        status
+      const { level, status, district, sort, page, pageSize } = req.query;
+      const result = await incidentsService.findAll({
+        level,
+        status,
+        district,
+        sortBy: sort,
+        page: parseInt(page) || 1,
+        pageSize: parseInt(pageSize) || 50
       });
-      res.status(200).json({ data });
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  },
+
+  async getById(req, res, next) {
+    try {
+      const incident = await incidentsService.findById(Number(req.params.id));
+      if (!incident) return res.status(404).json({ error: "Incident not found" });
+      res.status(200).json({ data: incident });
     } catch (e) {
       next(e);
     }
@@ -18,10 +32,28 @@ const incidentsController = {
   async create(req, res, next) {
     try {
       const incident = await incidentsService.create(req.body);
-      res
-        .status(201)
-        .set("Location", `/api/v1/incidents/${incident.id}`)
-        .json({ data: incident });
+      res.status(201).set("Location", `/api/v1/incidents/${incident.id}`).json({ data: incident });
+    } catch (e) {
+      next(e);
+    }
+  },
+
+  async getHeroIncidents(req, res, next) {
+    try {
+      const heroId = Number(req.params.id);
+      const { page, pageSize } = req.query;
+      
+      // Check hero exists first
+      const heroService = require("../services/heroesService").heroesService;
+      const hero = await heroService.findById(heroId);
+      if (!hero) return res.status(404).json({ error: "Hero not found" });
+
+      const result = await incidentsService.getHeroIncidents(
+        heroId,
+        parseInt(page) || 1,
+        parseInt(pageSize) || 50
+      );
+      res.status(200).json(result);
     } catch (e) {
       next(e);
     }
@@ -32,9 +64,8 @@ const incidentsController = {
       const incidentId = Number(req.params.id);
       const heroId = req.body ? Number(req.body.hero_id) : NaN;
 
-      // brak pola -> 400 (zgodnie z wymaganiami)
       if (!req.body || req.body.hero_id === undefined) {
-        throw domainError(400, "Missing required field: hero_id");
+        throw domainError("Missing required field: hero_id", { status: 400, isDomain: true });
       }
 
       const result = await incidentsService.assign({ incidentId, heroId });

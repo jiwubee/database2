@@ -1,82 +1,122 @@
-const { pool } = require("../db/pool");
+const db = require("../db/knex");
 
 const incidentsRepo = {
-  async list({ threatLevel, status }) {
-    const where = [];
-    const values = [];
-    let i = 1;
+  async findAll({ level, status, district, sortBy = "created_at", page = 1, pageSize = 50 }) {
+    const validPageSize = Math.min(Math.max(pageSize || 50, 1), 50);
+    const validPage = Math.max(page || 1, 1);
+    const offset = (validPage - 1) * validPageSize;
 
-    if (threatLevel) {
-      where.push(`threat_level = $${i++}`);
-      values.push(threatLevel);
+    let query = db("incidents");
+
+    // Optional filters
+    if (level !== undefined) {
+      query = query.where("threat_level", level);
     }
-    if (status) {
-      where.push(`status = $${i++}`);
-      values.push(status);
+    if (status !== undefined) {
+      query = query.where("status", status);
+    }
+    if (district !== undefined) {
+      // ILIKE search on location field
+      query = query.whereRaw("location ILIKE ?", [`%${district}%`]);
     }
 
-    const { rows } = await pool.query(
-      `
-      SELECT id, location, threat_level, status, hero_id, created_at, resolved_at
-      FROM incidents
-      ${where.length ? "WHERE " + where.join(" AND ") : ""}
-      ORDER BY id ASC
-      `,
-      values
-    );
-    return rows;
+    // Count total
+    const countResult = await query.clone().count("* as count");
+    const total = countResult[0]?.count || 0;
+
+    // Sorting
+    const validSortColumns = ["created_at", "threat_level", "status"];
+    if (validSortColumns.includes(sortBy)) {
+      query = query.orderBy(sortBy, "desc");
+    } else {
+      query = query.orderBy("created_at", "desc");
+    }
+
+    const rows = await query
+      .select("id", "location", "threat_level", "status", "hero_id", "created_at", "resolved_at")
+      .limit(validPageSize)
+      .offset(offset);
+
+    const totalPages = Math.ceil(total / validPageSize);
+
+    return {
+      data: rows,
+      pagination: {
+        page: validPage,
+        pageSize: validPageSize,
+        total: parseInt(total),
+        totalPages
+      }
+    };
+  },
+
+  async findById(id) {
+    return db("incidents")
+      .where("id", id)
+      .select("id", "location", "threat_level", "status", "hero_id", "created_at", "resolved_at")
+      .first();
   },
 
   async create({ location, threatLevel, status }) {
-    const { rows } = await pool.query(
-      `
-      INSERT INTO incidents (location, threat_level, status)
-      VALUES ($1, $2, $3)
-      RETURNING id, location, threat_level, status, hero_id, created_at, resolved_at
-      `,
-      [location, threatLevel, status]
-    );
-    return rows[0];
+    const [incident] = await db("incidents")
+      .insert({ location, threat_level: threatLevel, status })
+      .returning(["id", "location", "threat_level", "status", "hero_id", "created_at", "resolved_at"]);
+    return incident;
   },
 
-  async getByIdForUpdate(client, incidentId) {
-    const { rows } = await client.query(
-      `
-      SELECT id, location, threat_level, status, hero_id, created_at, resolved_at
-      FROM incidents
-      WHERE id = $1
-      FOR UPDATE
-      `,
-      [incidentId]
-    );
-    return rows[0] || null;
+  async getHeroIncidents(heroId, page = 1, pageSize = 50) {
+    const validPageSize = Math.min(Math.max(pageSize || 50, 1), 50);
+    const validPage = Math.max(page || 1, 1);
+    const offset = (validPage - 1) * validPageSize;
+
+    // Count total incidents for hero
+    const countResult = await db("incidents")
+      .where("hero_id", heroId)
+      .count("* as count");
+    const total = countResult[0]?.count || 0;
+
+    const rows = await db("incidents")
+      .where("hero_id", heroId)
+      .select("id", "location", "threat_level", "status", "hero_id", "created_at", "resolved_at")
+      .orderBy("assigned_at", "desc")
+      .limit(validPageSize)
+      .offset(offset);
+
+    const totalPages = Math.ceil(total / validPageSize);
+
+    return {
+      data: rows,
+      pagination: {
+        page: validPage,
+        pageSize: validPageSize,
+        total: parseInt(total),
+        totalPages
+      }
+    };
   },
 
-  async assign(client, { incidentId, heroId }) {
-    const { rows } = await client.query(
-      `
-      UPDATE incidents
-      SET hero_id = $2
-      WHERE id = $1
-      RETURNING id, location, threat_level, status, hero_id, created_at, resolved_at
-      `,
-      [incidentId, heroId]
-    );
-    return rows[0] || null;
+  // Transactions (with trx passed as argument)
+  async getByIdForUpdate(trx, incidentId) {
+    return trx("incidents")
+      .where("id", incidentId)
+      .select("id", "location", "threat_level", "status", "hero_id", "created_at", "resolved_at")
+      .first();
   },
 
-  async resolve(client, incidentId) {
-    const { rows } = await client.query(
-      `
-      UPDATE incidents
-      SET status = 'resolved',
-          resolved_at = NOW()
-      WHERE id = $1
-      RETURNING id, location, threat_level, status, hero_id, created_at, resolved_at
-      `,
-      [incidentId]
-    );
-    return rows[0] || null;
+  async assign(trx, { incidentId, heroId }) {
+    const [incident] = await trx("incidents")
+      .where("id", incidentId)
+      .update({ hero_id: heroId, assigned_at: trx.fn.now() })
+      .returning(["id", "location", "threat_level", "status", "hero_id", "created_at", "resolved_at"]);
+    return incident || null;
+  },
+
+  async resolve(trx, incidentId) {
+    const [incident] = await trx("incidents")
+      .where("id", incidentId)
+      .update({ status: "resolved", resolved_at: trx.fn.now() })
+      .returning(["id", "location", "threat_level", "status", "hero_id", "created_at", "resolved_at"]);
+    return incident || null;
   }
 };
 
