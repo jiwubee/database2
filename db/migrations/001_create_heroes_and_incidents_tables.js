@@ -2,11 +2,7 @@
  * @param { import("knex").Knex } knex
  * @returns { Promise<void> }
  */
-exports.up = function(knex) {
-  
-};
 exports.up = async (knex) => {
-    //bazowa
   await knex.schema.createTable('heroes', (table) => {
     table.increments('id').primary();
     table.string('name').notNullable().unique();
@@ -25,14 +21,11 @@ exports.up = async (knex) => {
   });
 };
 
-exports.down = async (knex) => {
-  await knex.schema.dropTableIfExists('incidents');
-  await knex.schema.dropTableIfExists('heroes');
-};
 /**
  * @param { import("knex").Knex } knex
  * @returns { Promise<void> }
  */
-exports.down = function(knex) {
-  
+exports.down = async (knex) => {
+  await knex.schema.dropTableIfExists('incidents');
+  await knex.schema.dropTableIfExists('heroes');
 };
